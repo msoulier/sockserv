@@ -34,6 +34,7 @@ func init() {
 func main() {
     port := flag.String("port", "4040", "port to connect")
     certFile := flag.String("certfile", "cert.pem", "trusted CA certificate")
+    noverify := flag.Bool("noverify", false, "do not verify host cert")
     flag.Parse()
 
     cert, err := os.ReadFile(*certFile)
@@ -45,6 +46,9 @@ func main() {
         panic("unable to parse cert")
     }
     config := &tls.Config{RootCAs: certPool}
+    if *noverify {
+        config.InsecureSkipVerify = true
+    }
 
     conn, err := tls.Dial("tcp", "localhost:"+*port, config)
     if err != nil {
