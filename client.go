@@ -8,11 +8,16 @@ import (
     "io"
     "fmt"
     "github.com/op/go-logging"
+    "bufio"
 )
 
 var (
     debug bool = false
     log *logging.Logger = nil
+    port int
+    address string
+    certFile string
+    noverify bool
 )
 
 func init() {
@@ -32,12 +37,24 @@ func init() {
 }
 
 func main() {
-    port := flag.String("port", "4040", "port to connect")
-    certFile := flag.String("certfile", "cert.pem", "trusted CA certificate")
-    noverify := flag.Bool("noverify", false, "do not verify host cert")
+    flag.IntVar(&port, "port", 0, "port to connect")
+    flag.StringVar(&address, "address", "", "host to connect to")
+    flag.StringVar(&certFile, "certfile", "cert.pem", "trusted CA certificate")
+    flag.BoolVar(&noverify, "noverify", false, "do not verify host cert")
+    flag.BoolVar(&debug, "debug", false, "debug logging")
     flag.Parse()
 
-    cert, err := os.ReadFile(*certFile)
+    if address == "" || port == 0 {
+        log.Error("--address and --port options are both required")
+        os.Exit(1)
+    }
+
+    log.Infof("connecting to %s:%d", address, port)
+    if noverify {
+        log.Infof("    TLS verification is disabled")
+    }
+
+    cert, err := os.ReadFile(certFile)
     if err != nil {
         panic(err)
     }
@@ -46,29 +63,48 @@ func main() {
         panic("unable to parse cert")
     }
     config := &tls.Config{RootCAs: certPool}
-    if *noverify {
+    if noverify {
         config.InsecureSkipVerify = true
     }
 
-    conn, err := tls.Dial("tcp", "localhost:"+*port, config)
+    conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", address, port), config)
     if err != nil {
         panic(err)
     }
 
-    _, err = io.WriteString(conn, "Hello simple secure Server\n")
-    if err != nil {
-        panic(err)
-    }
-    if err = conn.CloseWrite(); err != nil {
-        panic(err)
-    }
+    stdinReader := bufio.NewReader(os.Stdin)
 
-    buf := make([]byte, 256)
-    n, err := conn.Read(buf)
-    if err != nil && err != io.EOF {
-        panic(err)
-    }
+    for {
+        fmt.Print("> ")
+        if inbuf, err := stdinReader.ReadString('\n'); err != nil {
+            log.Errorf("error reading from stdin: %s", err)
+            break
+        } else {
+            n, err := io.WriteString(conn, inbuf)
+            if err != nil {
+                log.Errorf("write error: %s", err)
+                break
+            }
+            log.Infof("wrote %d bytes to server", n)
+        }
+        /*
+        if err = conn.CloseWrite(); err != nil {
+            log.Errorf("close error: %s", err)
+            break
+        }
+        */
 
-    fmt.Println("client read:", string(buf[:n]))
+        buf := make([]byte, 256)
+        n, err := conn.Read(buf)
+        if err != nil && err != io.EOF {
+            log.Errorf("read error: %s", err)
+            break
+        } else if err != nil && err == io.EOF {
+            log.Errorf("EOF")
+            break
+        }
+
+        fmt.Println("client read:", string(buf[:n]))
+    }
     conn.Close()
 }

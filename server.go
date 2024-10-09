@@ -5,13 +5,19 @@ import (
     "crypto/tls"
     "os"
     "net"
-    "io"
     "github.com/op/go-logging"
+    "bufio"
+    "fmt"
 )
 
 var (
     debug bool = false
     log *logging.Logger = nil
+    port int
+    certFile string
+    keyFile string
+    listen string
+    noecho bool
 )
 
 func init() {
@@ -31,19 +37,27 @@ func init() {
 }
 
 func main() {
-    port := flag.String("port", "4040", "listening port")
-    certFile := flag.String("cert", "cert.pem", "certificate PEM file")
-    keyFile := flag.String("key", "key.pem", "key PEM file")
+    flag.StringVar(&listen, "listen", "0.0.0.0", "IP to listen on")
+    flag.IntVar(&port, "port", 0, "listening port")
+    flag.StringVar(&certFile, "cert", "cert.pem", "certificate PEM file")
+    flag.StringVar(&keyFile, "key", "key.pem", "key PEM file")
+    flag.BoolVar(&debug, "debug", false, "debug logging")
+    flag.BoolVar(&noecho, "noecho", false, "do not echo input back on the socket")
     flag.Parse()
 
-    cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
+    if port == 0 {
+        log.Error("--port is a required option")
+        os.Exit(1)
+    }
+
+    cert, err := tls.LoadX509KeyPair(certFile, keyFile)
     if err != nil {
         panic(err)
     }
     config := &tls.Config{Certificates: []tls.Certificate{cert}}
 
-    log.Infof("listening on port %s\n", *port)
-    l, err := tls.Listen("tcp", ":"+*port, config)
+    log.Infof("listening on %s:%d", listen, port)
+    l, err := tls.Listen("tcp", fmt.Sprintf("%s:%d", listen, port), config)
     if err != nil {
         panic(err)
     }
@@ -57,8 +71,18 @@ func main() {
         log.Infof("accepted connection from %s\n", conn.RemoteAddr())
 
         go func(c net.Conn) {
-            io.Copy(c, c)
-            c.Close()
+            defer c.Close()
+            for {
+                buffer, err := bufio.NewReader(c).ReadString('\n')
+                if err != nil {
+                    log.Errorf("read error: %s", err)
+                    break
+                }
+                log.Infof("received: %s", buffer)
+                if !noecho {
+                    fmt.Fprintf(c, buffer)
+                }
+            }
             log.Errorf("closing connection from %s\n", conn.RemoteAddr())
         }(conn)
     }
