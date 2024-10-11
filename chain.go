@@ -1,14 +1,15 @@
 package main
 
 import (
-    "os"
-    "fmt"
-    "flag"
-    "crypto/tls"
-    "crypto/x509"
-    "encoding/pem"
-    "io/ioutil"
-    "github.com/op/go-logging"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"flag"
+	"fmt"
+	"io/ioutil"
+	"os"
+
+	"github.com/op/go-logging"
 )
 
 var (
@@ -87,6 +88,7 @@ func main() {
     flag.Parse()
 
     if connect == "" && path == "" {
+        flag.PrintDefaults()
         log.Error("either --connect or --path are required options")
         os.Exit(1)
     }

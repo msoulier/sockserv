@@ -1,23 +1,26 @@
 package main
 
 import (
-    "flag"
-    "crypto/tls"
-    "crypto/x509"
-    "os"
-    "io"
-    "fmt"
-    "github.com/op/go-logging"
-    "bufio"
+	"bufio"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"net"
+	"os"
+
+	"github.com/op/go-logging"
 )
 
 var (
     debug bool = false
     log *logging.Logger = nil
-    port int
-    address string
+    connect string
     certFile string
     noverify bool
+    transport string
 )
 
 func init() {
@@ -36,40 +39,74 @@ func init() {
     log = logging.MustGetLogger("sockserv")
 }
 
-func main() {
-    flag.IntVar(&port, "port", 0, "port to connect")
-    flag.StringVar(&address, "address", "", "host to connect to")
-    flag.StringVar(&certFile, "certfile", "cert.pem", "trusted CA certificate")
-    flag.BoolVar(&noverify, "noverify", false, "do not verify host cert")
-    flag.BoolVar(&debug, "debug", false, "debug logging")
-    flag.Parse()
-
-    if address == "" || port == 0 {
-        log.Error("--address and --port options are both required")
-        os.Exit(1)
+func getConnTCP(connect string) (net.Conn, error) {
+    conn, err := net.Dial("tcp", connect)
+    if err != nil {
+        log.Error("Dial: %s", err)
+        return conn, err
     }
+    return conn, nil
+}
 
-    log.Infof("connecting to %s:%d", address, port)
-    if noverify {
-        log.Infof("    TLS verification is disabled")
-    }
-
+func getConnTLS(connect, certFile string, noverify bool) (net.Conn, error) {
+    var conn net.Conn
     cert, err := os.ReadFile(certFile)
     if err != nil {
-        panic(err)
+        log.Errorf("ReadFile: %s", err)
+        return conn, err
     }
     certPool := x509.NewCertPool()
     if ok := certPool.AppendCertsFromPEM(cert); !ok {
-        panic("unable to parse cert")
+        log.Error("unable to parse cert")
+        return conn, errors.New("unable to parse cert")
     }
     config := &tls.Config{RootCAs: certPool}
     if noverify {
         config.InsecureSkipVerify = true
     }
 
-    conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", address, port), config)
+    conn, err = tls.Dial("tcp", connect, config)
     if err != nil {
-        panic(err)
+        log.Errorf("Dial: %s", err)
+        return conn, err
+    }
+
+    return conn, nil
+}
+
+func main() {
+    flag.StringVar(&connect, "connect", "", "host:port to connect to")
+    flag.StringVar(&certFile, "certfile", "cert.pem", "trusted CA certificate")
+    flag.StringVar(&transport, "transport", "tcp", "transport to use (tcp|tls)")
+    flag.BoolVar(&noverify, "noverify", false, "do not verify host cert")
+    flag.BoolVar(&debug, "debug", false, "debug logging")
+    flag.Parse()
+
+    if connect == "" {
+        flag.PrintDefaults()
+        log.Error("--connect is a required option")
+        os.Exit(1)
+    }
+
+    log.Infof("connecting to %s", connect)
+    if noverify {
+        log.Infof("    TLS verification is disabled")
+    }
+
+    var conn net.Conn
+    var err error
+    if transport == "tcp" {
+        conn, err = getConnTCP(connect)
+        if err != nil {
+            log.Errorf("getConnTCP: %s", err)
+            os.Exit(1)
+        }
+    } else if transport == "tls" {
+        conn, err = getConnTLS(connect, certFile, noverify)
+        if err != nil {
+            log.Errorf("getConnTLS: %s", err)
+            os.Exit(1)
+        }
     }
 
     stdinReader := bufio.NewReader(os.Stdin)
@@ -87,12 +124,6 @@ func main() {
             }
             log.Infof("wrote %d bytes to server", n)
         }
-        /*
-        if err = conn.CloseWrite(); err != nil {
-            log.Errorf("close error: %s", err)
-            break
-        }
-        */
 
         buf := make([]byte, 256)
         n, err := conn.Read(buf)

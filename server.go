@@ -1,13 +1,14 @@
 package main
 
 import (
-    "flag"
-    "crypto/tls"
-    "os"
-    "net"
-    "github.com/op/go-logging"
-    "bufio"
-    "fmt"
+	"bufio"
+	"crypto/tls"
+	"flag"
+	"fmt"
+	"net"
+	"os"
+
+	"github.com/op/go-logging"
 )
 
 var (
@@ -46,6 +47,7 @@ func main() {
     flag.Parse()
 
     if port == 0 {
+        flag.PrintDefaults()
         log.Error("--port is a required option")
         os.Exit(1)
     }
