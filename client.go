@@ -1,17 +1,17 @@
 package main
 
 import (
-	"bufio"
-	"crypto/tls"
-	"crypto/x509"
-	"errors"
-	"flag"
-	"fmt"
-	"io"
-	"net"
-	"os"
+    "bufio"
+    "crypto/tls"
+    "crypto/x509"
+    "errors"
+    "flag"
+    "fmt"
+    "io"
+    "net"
+    "os"
 
-	"github.com/op/go-logging"
+    "github.com/op/go-logging"
 )
 
 var (
@@ -25,9 +25,9 @@ var (
 
 func init() {
     format := logging.MustStringFormatter(
-        `%{time:2006-01-02 15:04:05.000-0700} %{level} [%{shortfile}] %{message}`,  
+        `%{time:2006-01-02 15:04:05.000-0700} %{level} [%{shortfile}] %{message}`,
     )
-    stderrBackend := logging.NewLogBackend(os.Stderr, "", 0) 
+    stderrBackend := logging.NewLogBackend(os.Stderr, "", 0)
     stderrFormatter := logging.NewBackendFormatter(stderrBackend, format)
     stderrBackendLevelled := logging.AddModuleLevel(stderrFormatter)
     logging.SetBackend(stderrBackendLevelled)
